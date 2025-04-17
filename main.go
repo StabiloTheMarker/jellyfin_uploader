@@ -3,14 +3,9 @@ package main
 import (
 	"io"
 	"log"
-	"mime/multipart"
 	"net/http"
 	"os"
 	"strings"
-)
-
-const (
-	staticPath = "./webapp/dist"
 )
 
 func main() {
@@ -44,7 +39,6 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var lastFileName string
-	var fileParts []*multipart.Part
 	var path string
 	for {
 		part, err := reader.NextPart()
@@ -53,10 +47,6 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if part == nil {
-			http.Error(w, "part is nil", http.StatusInternalServerError)
 			return
 		}
 		formName := part.FormName()
@@ -73,32 +63,29 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		} else {
-			fileParts = append(fileParts, part)
+			filename := part.FileName()
+			if lastFileName != filename {
+				log.Println("Uploading file:", filename)
+				lastFileName = filename
+			}
+			dst, err := os.Create(path + "/" + filename)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			_, err = io.Copy(dst, part)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			err = dst.Close()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			log.Println("Uploaded file " + filename)
 		}
 
-	}
-	for _, filePart := range fileParts {
-		filename := filePart.FileName()
-		if lastFileName != filename {
-			log.Println("Uploading file:", filename)
-			lastFileName = filename
-		}
-		dst, err := os.Create(path + "/" + filename)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		_, err = io.Copy(dst, filePart)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		err = dst.Close()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		log.Println("Uploaded file " + filename)
 	}
 }
 
