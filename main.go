@@ -6,6 +6,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"strings"
 )
 
 const (
@@ -14,6 +15,7 @@ const (
 
 func main() {
 
+	env := readEnvFile()
 	// Handle file uploads
 	http.HandleFunc("/api/upload", uploadHandler)
 
@@ -21,7 +23,8 @@ func main() {
 	fs := http.FileServer(http.Dir(staticPath))
 	http.Handle("/", fs)
 
-	log.Fatal(http.ListenAndServe(":8000", nil))
+	port := env["PORT"]
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
 func uploadHandler(w http.ResponseWriter, r *http.Request) {
@@ -99,4 +102,22 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+func readEnvFile() map[string]string {
+	bytes, err := os.ReadFile(".env")
+	if err != nil {
+		log.Fatal(err)
+	}
+	content := string(bytes)
+	lines := strings.Split(content, "\n")
+	env := make(map[string]string)
+	for _, line := range lines {
+		splitLine := strings.Split(line, "=")
+		if len(splitLine) != 2 {
+			log.Fatalf("Invalid line in .env file: %s", line)
+		}
+		env[splitLine[0]] = splitLine[1]
+	}
+	return env
 }
