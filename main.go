@@ -20,7 +20,7 @@ func main() {
 	http.HandleFunc("/api/upload", uploadHandler)
 
 	// Serve static files (Vue frontend)
-	fs := http.FileServer(http.Dir(staticPath))
+	fs := http.FileServer(http.Dir(env["WEBAPP_DIR"]))
 	http.Handle("/", fs)
 
 	port := env["PORT"]
@@ -61,15 +61,12 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		formName := part.FormName()
 		if formName == "path" {
-			log.Println("im here")
 			value, err := io.ReadAll(part)
-			log.Printf("value is %s", value)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 			path = string(value)
-			log.Printf("path is %s", path)
 			err = os.MkdirAll(path, 0777)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -101,6 +98,7 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		log.Println("Uploaded file " + filename)
 	}
 }
 
@@ -110,9 +108,13 @@ func readEnvFile() map[string]string {
 		log.Fatal(err)
 	}
 	content := string(bytes)
+	content = strings.ReplaceAll(content, "\r\n", "\n")
 	lines := strings.Split(content, "\n")
 	env := make(map[string]string)
 	for _, line := range lines {
+		if line == "" {
+			continue
+		}
 		splitLine := strings.Split(line, "=")
 		if len(splitLine) != 2 {
 			log.Fatalf("Invalid line in .env file: %s", line)
