@@ -6,25 +6,16 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
-	"path/filepath"
-	"strings"
 )
 
 const (
-	uploadPath = "./uploads"
 	staticPath = "./webapp/dist"
-	maxMemory  = 1024 * 1024 * 100 // 100 MB
 )
 
 func main() {
-	// Ensure upload directory exists
-	err := os.MkdirAll(uploadPath, os.ModePerm)
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	// Handle file uploads
-	http.HandleFunc("/upload", uploadHandler)
+	http.HandleFunc("/api/upload", uploadHandler)
 
 	// Serve static files (Vue frontend)
 	fs := http.FileServer(http.Dir(staticPath))
@@ -39,58 +30,73 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Limit memory usage but allow streaming large files
-	err := r.ParseMultipartForm(maxMemory)
+	reader, err := r.MultipartReader()
 	if err != nil {
-		http.Error(w, "Could not parse multipart form: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if reader == nil {
+		http.Error(w, "multipart reader is nil", http.StatusInternalServerError)
 		return
 	}
 
-	files := r.MultipartForm.File["files"]
-	if len(files) == 0 {
-		http.Error(w, "No files uploaded", http.StatusBadRequest)
-		return
-	}
+	var lastFileName string
+	var fileParts []*multipart.Part
+	var path string
+	for {
+		part, err := reader.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if part == nil {
+			http.Error(w, "part is nil", http.StatusInternalServerError)
+			return
+		}
+		formName := part.FormName()
+		if formName == "path" {
+			log.Println("im here")
+			value, err := io.ReadAll(part)
+			log.Printf("value is %s", value)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			path = string(value)
+			log.Printf("path is %s", path)
+			err = os.MkdirAll(path, 0777)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		} else {
+			fileParts = append(fileParts, part)
+		}
 
-	for _, fileHeader := range files {
-		if err := saveUploadedFile(fileHeader); err != nil {
-			http.Error(w, "Failed to save file: "+err.Error(), http.StatusInternalServerError)
+	}
+	for _, filePart := range fileParts {
+		filename := filePart.FileName()
+		if lastFileName != filename {
+			log.Println("Uploading file:", filename)
+			lastFileName = filename
+		}
+		dst, err := os.Create(path + "/" + filename)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_, err = io.Copy(dst, filePart)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		err = dst.Close()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
-
-	w.WriteHeader(http.StatusOK)
-	log.Println("Upload Successful")
-}
-
-func saveUploadedFile(fileHeader *multipart.FileHeader) error {
-	file, err := fileHeader.Open()
-	if err != nil {
-		return err
-	}
-	defer func(file multipart.File) {
-		err := file.Close()
-		if err != nil {
-			log.Fatal(err)
-		}
-	}(file)
-
-	dst, err := os.Create(filepath.Join(uploadPath, sanitizeFilename(fileHeader.Filename)))
-	if err != nil {
-		return err
-	}
-	defer func(dst *os.File) {
-		err := dst.Close()
-		if err != nil {
-			log.Fatal(err)
-		}
-	}(dst)
-
-	_, err = io.Copy(dst, file)
-	return err
-}
-
-func sanitizeFilename(name string) string {
-	// Simple sanitization to avoid path traversal
-	return filepath.Base(strings.ReplaceAll(name, "..", ""))
 }
