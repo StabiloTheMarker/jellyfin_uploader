@@ -16,10 +16,19 @@ $env:GOARM = $GOARM
 
 # Build the binary
 Write-Host "Building $GoFile for $GOOS/$GOARCH (GOARM=$GOARM)..."
-go build -o $OutputName $GoFile
+go build -o bin/$OutputName $GoFile
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "✅ Build succeeded: $OutputName"
 } else {
     Write-Host "❌ Build failed."
 }
+
+<#
+Set-Location webapp
+npm run build
+
+Write-Host "✅ Successfully built dist"
+
+Set-Location ..
+#>

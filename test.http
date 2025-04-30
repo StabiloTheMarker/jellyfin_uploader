@@ -1,0 +1,19 @@
+POST http://localhost:8000/api/upload_process
+Content-Type: application/json
+
+{
+
+}
+###
+GET http://localhost:8000/api/upload_process
+
+###
+POST http://localhost:8000/api/file
+Content-Type: application/jsonS
+
+{
+    "UploadProcessID": 1,
+    "Uploaded": true,
+    "Filepath": "/path/to/file",
+    "UploadedAt": "2020-01-01T12:00:00Z"
+}
