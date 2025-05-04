@@ -95,6 +95,10 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			log.Println("Uploaded file " + filename)
 		}
-
+		err = part.Close()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 }
