@@ -25,6 +25,7 @@ func HandleUpload(w http.ResponseWriter, r *http.Request) error {
 	}
 	id := r.PathValue("id")
 	uploadProcess, err := repositories.GetUploadProcess(id)
+	os.MkdirAll(uploadProcess.DirPath, 0777)
 	if err != nil {
 		return err
 	}
@@ -44,7 +45,7 @@ func HandleUpload(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		file := models.File{
-			Name:            dst.Name(),
+			Name:            filename,
 			Uploaded:        false,
 			UploadProcessID: uploadProcess.ID,
 		}
@@ -52,7 +53,6 @@ func HandleUpload(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-
 		_, err = io.Copy(dst, part)
 		if err != nil {
 			return err

@@ -32,8 +32,9 @@ async function loadProcesses() {
 onMounted(async () => {
   await loadProcesses()
 })
-async function handleSubmit2() {
+async function handleSubmit() {
   successfullUpload.value = false
+  isUploading.value = true
   // First we create the uploadProcess
   const formData = new FormData()
   formData.append("DirPath", path.value as string)
@@ -42,42 +43,47 @@ async function handleSubmit2() {
       headers: { "Content-Type": "application/json" }
     })
     const data = await uploadProcessResponse.data
-    const processId = data.id
+    const processId = data.ID
+    const fileProgresses: Record<string, number> = {}
+    await Promise.all(files.value.map(it => handleFileUpload(it, processId, fileProgresses)))
   }
   catch (e) {
     toast.error("Could not create Upload Process " + e)
   }
-
-}
-async function handleSubmit() {
-  successfullUpload.value = false
-  const formData = new FormData()
-  formData.append("path", path.value as string)
-  for (const file of files.value) {
-    formData.append("files", file)
-  }
-
-  try {
-    isUploading.value = true
-    await axios.post("/api/upload", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-      onUploadProgress: (progressEvent: AxiosProgressEvent) => {
-        if (progressEvent.total) {
-          progress.value = Math.round((progressEvent.loaded * 100) / progressEvent.total)
-          loadProcesses()
-        } else {
-          console.log(`Uploaded ${progressEvent.loaded} bytes (total unknown)`)
-        }
-      }
-    })
-    toast.success("Upload successfully.")
-    successfullUpload.value = true;
-  } catch (error) {
-    console.error("There was an error", error)
-    toast.error("There was an error uploading the file")
-  } finally {
+  finally {
     isUploading.value = false
   }
+}
+
+async function handleFileUpload(file: File, processId: number, fileProgresses: Record<string, number>): Promise<void> {
+  const fileName = file.name
+  fileProgresses[fileName] = 0
+  const fileFormData = new FormData()
+  fileFormData.append("files", file)
+  try {
+    const response = await axios.post("/api/upload/" + processId, fileFormData, {
+      headers: {
+        "Content-Type": "multipart/form-data"
+      },
+      onUploadProgress(progressEvent: AxiosProgressEvent) {
+        const fileProgress = Math.round((progressEvent.loaded * 100) / (progressEvent.total!!))
+        fileProgresses[fileName] = fileProgress
+        progress.value = calculateTotalProgress(fileProgresses)
+      },
+    })
+    if (response.status === 200) {
+      toast.success("Successfully uploaded file " + fileName)
+    }
+  }
+  catch (e) {
+    toast.error("Error in uploading file " + fileName)
+  }
+}
+
+function calculateTotalProgress(fileProgresses: Record<string, number>): number {
+  const count = Object.keys(fileProgresses).length
+  const values = Object.values(fileProgresses)
+  return values.reduce((prev, curr) => curr + prev) / count
 }
 
 </script>
@@ -93,7 +99,7 @@ async function handleSubmit() {
     </div>
     <div id="container" class="flex flex-col">
       <h2 class="font-semibold text-2xl mb-4">Upload Files</h2>
-      <form class="flex flex-col gap-5" @submit.prevent="handleSubmit2" enctype="multipart/form-data" method="post">
+      <form class="flex flex-col gap-5" @submit.prevent="handleSubmit" enctype="multipart/form-data" method="post">
         <Input v-model="path" class="border border-black" name="path" type="text" />
         <Input @change="(e: Event) => {
           const target = e.target as HTMLInputElement
