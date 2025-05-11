@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/gorilla/mux"
 )
 
 func HandleUpload(w http.ResponseWriter, r *http.Request) error {
@@ -23,7 +25,8 @@ func HandleUpload(w http.ResponseWriter, r *http.Request) error {
 	if reader == nil {
 		return errors.New("multipart reader is nil")
 	}
-	id := r.PathValue("id")
+	vars := mux.Vars(r)
+	id := vars["id"]
 	uploadProcess, err := repositories.GetUploadProcess(id)
 	os.MkdirAll(uploadProcess.DirPath, 0777)
 	if err != nil {

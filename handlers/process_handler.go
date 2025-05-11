@@ -6,6 +6,8 @@ import (
 	"jellyfin_uploader/models"
 	"jellyfin_uploader/repositories"
 	"net/http"
+
+	"github.com/gorilla/mux"
 )
 
 func HandleProcess(w http.ResponseWriter, r *http.Request) error {
@@ -52,7 +54,8 @@ func CreateProcessHandler(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 func ShowProcessHandler(w http.ResponseWriter, r *http.Request) error {
-	id := r.PathValue("id")
+	vars := mux.Vars(r)
+	id := vars["id"]
 	uploadProcess, err := repositories.GetUploadProcess(id)
 	if err != nil {
 		return err
@@ -66,7 +69,8 @@ func ShowProcessHandler(w http.ResponseWriter, r *http.Request) error {
 }
 
 func DeleteProcessHandler(w http.ResponseWriter, r *http.Request) error {
-	id := r.PathValue("id")
+	vars := mux.Vars(r)
+	id := vars["id"]
 	err := repositories.DeleteUploadProcess(id)
 	if err != nil {
 		return err

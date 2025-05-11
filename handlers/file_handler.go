@@ -5,6 +5,8 @@ import (
 	"errors"
 	"jellyfin_uploader/repositories"
 	"net/http"
+
+	"github.com/gorilla/mux"
 )
 
 func HandleFile(w http.ResponseWriter, r *http.Request) error {
@@ -16,7 +18,8 @@ func HandleFile(w http.ResponseWriter, r *http.Request) error {
 }
 
 func handleFileGet(w http.ResponseWriter, r *http.Request) error {
-	id := r.PathValue("id")
+	vars := mux.Vars(r)
+	id := vars["id"]
 	file, err := repositories.GetFile(id)
 	if err != nil {
 		return err
