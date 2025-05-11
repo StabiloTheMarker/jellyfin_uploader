@@ -10,7 +10,7 @@ scp -r models jellyfin@pi:/jellyfin/src
 scp -r repositories jellyfin@pi:/jellyfin/src
 scp -r util jellyfin@pi:/jellyfin/src
 scp main.go jellyfin@pi:/jellyfin/src
-scp -r webapp/dist jellyfin@pi/jellyfin
+scp -r webapp/dist jellyfin@pi:/jellyfin
 ssh jellyfin@pi "cd /jellyfin/src && go mod init jellyfin_uploader"
 ssh jellyfin@pi "cd /jellyfin/src && go get -u gorm.io/gorm"
 ssh jellyfin@pi "cd /jellyfin/src && go get -u gorm.io/driver/sqlite"
