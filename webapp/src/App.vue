@@ -14,6 +14,7 @@ const isUploading = ref<boolean>(false)
 const successfullUpload = ref(false)
 const files = ref<File[]>([])
 const uploadProcesses = ref<UploadProcess[]>([])
+const uploadSpeed = ref(0)
 
 async function loadUploadProcesses(): Promise<UploadProcess[]> {
   const response = await axios.get("/api/upload_process")
@@ -45,7 +46,9 @@ async function handleSubmit() {
     const data = await uploadProcessResponse.data
     const processId = data.ID
     const fileProgresses: Record<string, number> = {}
-    await Promise.all(files.value.map(it => handleFileUpload(it, processId, fileProgresses)))
+    const uploadSpeeds: Record<string, number> = {}
+    await Promise.all(files.value.map(it => handleFileUpload(it, processId, fileProgresses, uploadSpeeds)))
+    successfullUpload.value = true
   }
   catch (e) {
     toast.error("Could not create Upload Process " + e)
@@ -55,17 +58,30 @@ async function handleSubmit() {
   }
 }
 
-async function handleFileUpload(file: File, processId: number, fileProgresses: Record<string, number>): Promise<void> {
+async function handleFileUpload(file: File, processId: number, fileProgresses: Record<string, number>, uploadSpeeds: Record<string, number>): Promise<void> {
   const fileName = file.name
   fileProgresses[fileName] = 0
   const fileFormData = new FormData()
   fileFormData.append("files", file)
+  let lastTime = Date.now()
+  let lastLoaded = 0
   try {
     const response = await axios.post("/api/upload/" + processId, fileFormData, {
       headers: {
         "Content-Type": "multipart/form-data"
       },
       onUploadProgress(progressEvent: AxiosProgressEvent) {
+
+        const now = Date.now()
+        const timeElapsed = (now - lastTime) / 1000
+        const bytesUploaded = progressEvent.loaded - lastLoaded
+        if (timeElapsed > 0) {
+          const speedBytesPerSec = bytesUploaded / timeElapsed
+          const speedKbps = (speedBytesPerSec / (1024 * 1024))
+          uploadSpeeds[fileName] = speedKbps
+        }
+        uploadSpeed.value = Object.values(uploadSpeeds).reduce((prev, curr) => curr + prev)
+
         const fileProgress = Math.round((progressEvent.loaded * 100) / (progressEvent.total!!))
         fileProgresses[fileName] = fileProgress
         progress.value = calculateTotalProgress(fileProgresses)
@@ -109,9 +125,12 @@ function calculateTotalProgress(fileProgresses: Record<string, number>): number 
       </form>
       <p v-if="successfullUpload" class="mt-5 text-green-700">Successfully Upload</p>
       <Progress class="mt-5" v-if="isUploading" :model-value="progress"></Progress>
-      <div v-if="isUploading" class="flex mt-5 justify-between">
-        <p>Uploaded Percent: </p>
-        <p>{{ progress }}%</p>
+      <div v-if="isUploading" class="flex flex-col mt-5 gap-5">
+        <div class="flex justify-between">
+          <p>Uploaded Percent: </p>
+          <p>{{ progress }}%</p>
+        </div>
+        <p>Upload Speed: {{ uploadSpeed.toFixed(1) }} MB/s</p>
       </div>
     </div>
   </div>

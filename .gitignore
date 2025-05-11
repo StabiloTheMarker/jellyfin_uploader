@@ -25,4 +25,5 @@ dist-ssr
 bin
 pkg
 *.db
+upload
 .vscode
