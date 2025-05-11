@@ -1,104 +1,77 @@
 package handlers
 
 import (
+	"errors"
 	"io"
 	"jellyfin_uploader/models"
 	"jellyfin_uploader/repositories"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 )
 
-func UploadHandler(w http.ResponseWriter, r *http.Request) {
+func HandleUpload(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
-		return
+		return errors.New("Invalid Request Method")
 	}
-
 	reader, err := r.MultipartReader()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return err
 	}
 	if reader == nil {
-		http.Error(w, "multipart reader is nil", http.StatusInternalServerError)
-		return
+		return errors.New("multipart reader is nil")
 	}
-
-	var lastFileName string
-	var path string
-	uploadProcess := models.UploadProcess{}
+	id := r.PathValue("id")
+	uploadProcess, err := repositories.GetUploadProcess(id)
+	if err != nil {
+		return err
+	}
 	for {
 		part, err := reader.NextPart()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+			return err
 		}
-		formName := part.FormName()
-		if formName == "path" {
-			value, err := io.ReadAll(part)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			path = string(value)
-			err = os.MkdirAll(path, 0777)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			err = repositories.CreateUploadProcess(&uploadProcess)
-			log.Println("Created upload process")
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-		} else {
-			filename := part.FileName()
-			if lastFileName != filename {
-				log.Println("Uploading file:", filename)
-				lastFileName = filename
-			}
-			dst, err := os.Create(path + "/" + filename)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			log.Printf("Created UploadProcess with ID: %d", uploadProcess.ID)
-			file := models.File{Filepath: dst.Name(), Uploaded: false, UploadProcessID: uploadProcess.ID}
-			err = repositories.CreateFile(&file)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
+		filename := part.FileName()
+		filepath := filepath.Join(uploadProcess.DirPath, filename)
+		log.Println("Uploading file:", filename)
+		dst, err := os.Create(filepath)
+		if err != nil {
+			return err
+		}
+		file := models.File{
+			Name:            dst.Name(),
+			Uploaded:        false,
+			UploadProcessID: uploadProcess.ID,
+		}
+		err = repositories.CreateFile(&file)
+		if err != nil {
+			return err
+		}
 
-			_, err = io.Copy(dst, part)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			file.Uploaded = true
-			file.UploadedAt = time.Now()
-			err = repositories.UpdateFile(&file)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			err = dst.Close()
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			log.Println("Uploaded file " + filename)
+		_, err = io.Copy(dst, part)
+		if err != nil {
+			return err
 		}
+		file.Uploaded = true
+		file.UploadedAt = time.Now()
+		err = repositories.UpdateFile(&file)
+		if err != nil {
+			return err
+		}
+		err = dst.Close()
+		if err != nil {
+			return err
+		}
+		log.Println("Uploaded file " + filename)
 		err = part.Close()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+			return err
 		}
 	}
+	return nil
 }

@@ -7,12 +7,13 @@ import (
 
 type File struct {
 	gorm.Model
-	Filepath        string
+	Name            string
 	Uploaded        bool
 	UploadProcessID uint
 	UploadedAt      time.Time
 }
 type UploadProcess struct {
 	gorm.Model
-	Files []File
+	DirPath string
+	Files   []File
 }

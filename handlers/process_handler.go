@@ -2,35 +2,85 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
+	"jellyfin_uploader/models"
 	"jellyfin_uploader/repositories"
 	"net/http"
 )
 
-func HandleProcess(w http.ResponseWriter, r *http.Request) {
+func HandleProcess(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == http.MethodGet {
-		ListProcessHandler(w, r)
+		return ListProcessHandler(w, r)
+	}
+	if r.Method == http.MethodPost {
+		return CreateProcessHandler(w, r)
 	} else {
-		DeleteProcessHandler(w, r)
+		return errors.New("Cannot handle this http method")
 	}
 }
 
-func DeleteProcessHandler(w http.ResponseWriter, r *http.Request) {
-	id := r.URL.Query().Get("processId")
-	err := repositories.DeleteUploadProcess(id)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+func HandleProcessItem(w http.ResponseWriter, r *http.Request) error {
+	if r.Method == http.MethodGet {
+		return ShowProcessHandler(w, r)
+	}
+	if r.Method == http.MethodDelete {
+		return DeleteProcessHandler(w, r)
+	} else {
+		return errors.New("Can not handle method " + r.Method + " for this URL")
 	}
 }
-func ListProcessHandler(w http.ResponseWriter, r *http.Request) {
+
+func CreateProcessHandler(w http.ResponseWriter, r *http.Request) error {
+	var uploadProcess models.UploadProcess
+	body := r.Body
+	if body == nil {
+		return errors.New("Empty Body")
+	}
+	defer body.Close()
+	err := json.NewDecoder(body).Decode(&uploadProcess)
+	if err != nil {
+		return err
+	}
+	err = repositories.CreateUploadProcess(&uploadProcess)
+	if err != nil {
+		return err
+	}
+	err = json.NewEncoder(w).Encode(uploadProcess)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func ShowProcessHandler(w http.ResponseWriter, r *http.Request) error {
+	id := r.PathValue("id")
+	uploadProcess, err := repositories.GetUploadProcess(id)
+	if err != nil {
+		return err
+	}
+	err = json.NewEncoder(w).Encode(uploadProcess)
+	if err != nil {
+		return err
+	}
+	return nil
+
+}
+
+func DeleteProcessHandler(w http.ResponseWriter, r *http.Request) error {
+	id := r.PathValue("id")
+	err := repositories.DeleteUploadProcess(id)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func ListProcessHandler(w http.ResponseWriter, r *http.Request) error {
 	processes, err := repositories.ListUploadProcesses()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return err
 	}
 	err = json.NewEncoder(w).Encode(processes)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return err
 	}
+	return nil
 }

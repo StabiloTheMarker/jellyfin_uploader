@@ -1,16 +1,29 @@
 package util
 
 import (
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 	"jellyfin_uploader/models"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 var DB *gorm.DB
+
+type ApiHandleFunc func(w http.ResponseWriter, r *http.Request) error
+
+func MakeApiFunc(f ApiHandleFunc) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		err := f(w, r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
+}
 
 func ReadEnvFile() map[string]string {
 	bytes, err := os.ReadFile(".env")

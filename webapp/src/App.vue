@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import {Button} from "@/components/ui/button";
-import {onMounted, ref} from "vue";
-import axios, {type AxiosProgressEvent} from "axios";
-import {Input} from "@/components/ui/input";
-import {Progress} from "@/components/ui/progress"
-import {toast, Toaster} from "vue-sonner";
-import {mapUploadProcess, type UploadProcess} from "@/types.ts";
+import { Button } from "@/components/ui/button";
+import { onMounted, ref } from "vue";
+import axios, { type AxiosProgressEvent } from "axios";
+import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress"
+import { toast, Toaster } from "vue-sonner";
+import { mapUploadProcess, type UploadProcess } from "@/types.ts";
 import UploadProcessContainer from "@/components/custom/UploadProcessContainer.vue";
 
 const path = ref<string>()
@@ -31,9 +31,24 @@ async function loadProcesses() {
 
 onMounted(async () => {
   await loadProcesses()
-  console.log(uploadProcesses.value)
 })
+async function handleSubmit2() {
+  successfullUpload.value = false
+  // First we create the uploadProcess
+  const formData = new FormData()
+  formData.append("DirPath", path.value as string)
+  try {
+    const uploadProcessResponse = await axios.post("/api/upload_process", formData, {
+      headers: { "Content-Type": "application/json" }
+    })
+    const data = await uploadProcessResponse.data
+    const processId = data.id
+  }
+  catch (e) {
+    toast.error("Could not create Upload Process " + e)
+  }
 
+}
 async function handleSubmit() {
   successfullUpload.value = false
   const formData = new FormData()
@@ -45,7 +60,7 @@ async function handleSubmit() {
   try {
     isUploading.value = true
     await axios.post("/api/upload", formData, {
-      headers: {"Content-Type": "multipart/form-data"},
+      headers: { "Content-Type": "multipart/form-data" },
       onUploadProgress: (progressEvent: AxiosProgressEvent) => {
         if (progressEvent.total) {
           progress.value = Math.round((progressEvent.loaded * 100) / progressEvent.total)
@@ -68,21 +83,22 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <Toaster/>
+  <Toaster />
   <div class="max-w-lg m-auto mt-10">
     <h1 class="text-3xl mb-5">Jellyfin Uploader</h1>
     <div class="mb-10 flex flex-col gap-4 max-h-[400px] overflow-y-auto">
       <h2 class="font-semibold text-2xl mb-3">Uploads</h2>
-      <UploadProcessContainer @process-deleted="loadProcesses" v-for="process in uploadProcesses" :upload-process="process"></UploadProcessContainer>
+      <UploadProcessContainer @process-deleted="loadProcesses" v-for="process in uploadProcesses"
+        :upload-process="process"></UploadProcessContainer>
     </div>
     <div id="container" class="flex flex-col">
       <h2 class="font-semibold text-2xl mb-4">Upload Files</h2>
-      <form class="flex flex-col gap-5" @submit.prevent="handleSubmit" enctype="multipart/form-data" method="post">
-        <Input v-model="path" class="border border-black" name="path" type="text"/>
+      <form class="flex flex-col gap-5" @submit.prevent="handleSubmit2" enctype="multipart/form-data" method="post">
+        <Input v-model="path" class="border border-black" name="path" type="text" />
         <Input @change="(e: Event) => {
           const target = e.target as HTMLInputElement
           files = Array.from(target.files ?? [])
-        }" name="files" type="file" multiple/>
+        }" name="files" type="file" multiple />
         <Button type="submit">Submit</Button>
       </form>
       <p v-if="successfullUpload" class="mt-5 text-green-700">Successfully Upload</p>
