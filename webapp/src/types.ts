@@ -1,7 +1,7 @@
 
 export interface File {
     id: number;
-    Filepath: string;
+    Name: string;
     Uploaded: boolean;
     UploadedAt?: Date;
     CreatedAt: Date;
@@ -13,19 +13,21 @@ interface FileJson {
     CreatedAt: string,
     UpdatedAt: string,
     UploadedAt?: string,
-    Filepath: string;
+    Name: string;
     Uploaded: boolean
 }
 
 interface UploadProcessJson {
     ID: number,
+    DirPath: string,
     CreatedAt: string,
     UpdatedAt: string,
     Files: FileJson[],
 }
 
 export interface UploadProcess {
-    ID: number;
+    ID: number,
+    DirPath: string,
     CreatedAt: Date,
     UpdatedAt: Date,
     Files: File[];
@@ -41,10 +43,10 @@ export function mapUploadProcess(json: UploadProcessJson): UploadProcess {
 }
 
 export function mapFile(json: FileJson): File {
-   return {
-       ...json,
-       UpdatedAt: new Date(json.UpdatedAt),
-       CreatedAt: new Date(json.CreatedAt),
-       UploadedAt: json.UploadedAt ? new Date(json.UploadedAt) : undefined
-   }
+    return {
+        ...json,
+        UpdatedAt: new Date(json.UpdatedAt),
+        CreatedAt: new Date(json.CreatedAt),
+        UploadedAt: json.UploadedAt ? new Date(json.UploadedAt) : undefined
+    }
 }

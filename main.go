@@ -21,7 +21,7 @@ func main() {
 
 	router.HandleFunc("/api/upload/{id}", util.MakeApiFunc(handlers.HandleUpload)).Methods("POST")
 	router.HandleFunc("/api/upload_process", util.MakeApiFunc(handlers.HandleProcess)).Methods("GET", "POST", "DELETE")
-	router.HandleFunc("/api/upload_process/{id}", util.MakeApiFunc(handlers.HandleProcessItem)).Methods("GET", "DELTE")
+	router.HandleFunc("/api/upload_process/{id}", util.MakeApiFunc(handlers.HandleProcessItem)).Methods("GET", "DELETE")
 	router.HandleFunc("/api/file", util.MakeApiFunc(handlers.HandleFile)).Methods("GET", "POST", "DELETE")
 
 	router.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
