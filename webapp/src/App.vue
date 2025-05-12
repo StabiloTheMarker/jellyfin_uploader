@@ -1,22 +1,42 @@
 <script setup lang="ts">
 import { Button } from "@/components/ui/button";
-import { onMounted, ref } from "vue";
+import { Label } from "@/components/ui/label"
+import { computed, onMounted, ref } from "vue";
 import axios, { type AxiosProgressEvent } from "axios";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress"
 import { toast, Toaster } from "vue-sonner";
 import { mapUploadProcess, type UploadProcess } from "@/models.ts";
 import UploadProcessContainer from "@/components/custom/UploadProcessContainer.vue";
-import type { UploadMetaData } from "./types";
+import { useIntervalFn } from "@vueuse/core";
 
 const path = ref<string>()
-const progress = ref<number | null>(0)
 const isUploading = ref<boolean>(false)
 const successfullUpload = ref(false)
 const files = ref<File[]>([])
 const uploadProcesses = ref<UploadProcess[]>([])
-const uploadSpeed = ref(0)
-const etaInMinutes = ref(0)
+const uploadedBytes = ref<number>(0)
+const totalBytes = ref<number>(0)
+const lastUploadedBytes = ref(0)
+const uploadSpeedMBps = ref(0)
+const etaMinutes = ref(0)
+const progressPercent = computed(() => {
+  if (totalBytes.value === 0) return 0
+  return (uploadedBytes.value / totalBytes.value) * 100
+})
+useIntervalFn(() => {
+  const diff = uploadedBytes.value - lastUploadedBytes.value
+  uploadSpeedMBps.value = diff / 1024 / 1024 // convert to MB/s
+
+  const remainingBytes = totalBytes.value - uploadedBytes.value
+  const secondsLeft = uploadSpeedMBps.value > 0
+    ? remainingBytes / (uploadSpeedMBps.value * 1024 * 1024)
+    : 0
+
+  etaMinutes.value = secondsLeft / 60
+  lastUploadedBytes.value = uploadedBytes.value
+}, 1000)
+
 
 async function loadUploadProcesses(): Promise<UploadProcess[]> {
   const response = await axios.get("/api/upload_process")
@@ -38,7 +58,7 @@ onMounted(async () => {
 async function handleSubmit() {
   successfullUpload.value = false
   isUploading.value = true
-  // First we create the uploadProcess
+
   const formData = new FormData()
   formData.append("DirPath", path.value as string)
   try {
@@ -47,15 +67,26 @@ async function handleSubmit() {
     })
     const data = await uploadProcessResponse.data
     const processId = data.ID
-    const fileMetaData: UploadMetaData = {
-      uploadSpeeds: {},
-      averageSpeed: {},
-      fileProgress: {},
-      speedCounter: {},
-      etaInMinutes: {}
+    const fileFormData = new FormData()
+    for (const file of files.value) {
+      fileFormData.append("files[]", file)
     }
-    await Promise.all(files.value.map(it => handleFileUpload(it, processId, fileMetaData)))
-    successfullUpload.value = true
+    try {
+      await axios.post("/api/upload/" + processId, fileFormData, {
+        headers: {
+          "Content-Type": "multipart/form-data"
+        },
+        onUploadProgress(progressEvent: AxiosProgressEvent) {
+          uploadedBytes.value = progressEvent.loaded
+          totalBytes.value = progressEvent.total ?? totalBytes.value
+        }
+      })
+      successfullUpload.value = true
+    }
+    catch (e) {
+      successfullUpload.value = false
+      toast.error({ message: e })
+    }
   }
   catch (e) {
     toast.error("Could not create Upload Process " + e)
@@ -64,58 +95,7 @@ async function handleSubmit() {
     isUploading.value = false
   }
 }
-async function handleFileUpload(file: File, processId: number, uploadMetaData: UploadMetaData): Promise<void> {
-  const fileName = file.name
-  uploadMetaData.fileProgress[fileName] = 0
-  const fileFormData = new FormData()
-  fileFormData.append("files", file)
-  let lastTime = Date.now()
-  let lastLoaded = 0
-  try {
-    const response = await axios.post("/api/upload/" + processId, fileFormData, {
-      headers: {
-        "Content-Type": "multipart/form-data"
-      },
-      onUploadProgress(progressEvent: AxiosProgressEvent) {
-        const now = Date.now()
-        const timeElapsed = (now - lastTime) / 1000
-        const bytesUploaded = progressEvent.loaded - lastLoaded
-        let speedBytesPerSec = 1
-        if (timeElapsed > 0) {
-          speedBytesPerSec = bytesUploaded / timeElapsed
-          const speedMbps = (speedBytesPerSec / (1024 * 1024))
-          uploadMetaData.uploadSpeeds[fileName] = speedMbps
-        }
-        const speed = Object.values(uploadMetaData.uploadSpeeds).reduce((prev, curr) => curr + prev)
-        uploadSpeed.value = speed
 
-        // ETA calculation
-        const totalBytes = progressEvent.total ?? file.size
-        const remainingBytes = totalBytes - progressEvent.loaded
-        const etaSeconds = remainingBytes / speedBytesPerSec
-        uploadMetaData.etaInMinutes[fileName] = etaSeconds / 60
-
-        etaInMinutes.value = Object.values(uploadMetaData.etaInMinutes).reduce((curr, prev) => curr + prev)
-
-        const fileProgress = Math.round((progressEvent.loaded * 100) / (progressEvent.total!!))
-        uploadMetaData.fileProgress[fileName] = fileProgress
-        progress.value = calculateTotalProgress(uploadMetaData.fileProgress)
-      },
-    })
-    if (response.status === 200) {
-      toast.success("Successfully uploaded file " + fileName)
-    }
-  }
-  catch (e) {
-    toast.error("Error in uploading file " + fileName)
-  }
-}
-
-function calculateTotalProgress(fileProgresses: Record<string, number>): number {
-  const count = Object.keys(fileProgresses).length
-  const values = Object.values(fileProgresses)
-  return values.reduce((prev, curr) => curr + prev) / count
-}
 
 </script>
 
@@ -131,23 +111,29 @@ function calculateTotalProgress(fileProgresses: Record<string, number>): number 
     <div id="container" class="flex flex-col">
       <h2 class="font-semibold text-2xl mb-4">Upload Files</h2>
       <form class="flex flex-col gap-5" @submit.prevent="handleSubmit" enctype="multipart/form-data" method="post">
-        <Input v-model="path" class="border border-black" name="path" type="text" />
-        <Input @change="(e: Event) => {
-          const target = e.target as HTMLInputElement
-          files = Array.from(target.files ?? [])
-        }" name="files" type="file" multiple />
+        <div>
+          <Label class="mb-2">Directory Path</Label>
+          <Input v-model="path" class="border border-black" name="path" type="text" />
+        </div>
+        <div>
+          <Label class="mb-2">Files to Upload</Label>
+          <Input @change="(e: Event) => {
+            const target = e.target as HTMLInputElement
+            files = Array.from(target.files ?? [])
+          }" name="files" type="file" multiple />
+        </div>
         <Button type="submit">Submit</Button>
       </form>
       <p v-if="successfullUpload" class="mt-5 text-green-700">Successfully Upload</p>
-      <Progress class="mt-5" v-if="isUploading" :model-value="progress"></Progress>
+      <Progress class="mt-5" v-if="isUploading" :model-value="progressPercent"></Progress>
       <div v-if="isUploading" class="flex flex-col mt-5 gap-5">
         <div class="flex justify-between">
           <p>Uploaded Percent: </p>
-          <p>{{ progress?.toFixed(2) }}%</p>
+          <p>{{ progressPercent?.toFixed(2) }}%</p>
         </div>
         <div class="flex justify-between">
-          <p>Upload Speed: {{ uploadSpeed.toFixed(1) }} MB/s</p>
-          <p>ETA in Minutes: {{ etaInMinutes.toFixed(2) }}</p>
+          <p>Upload Speed: {{ uploadSpeedMBps.toFixed(1) }} MB/s</p>
+          <p>ETA in Minutes: {{ etaMinutes.toFixed(2) }}</p>
         </div>
       </div>
     </div>
