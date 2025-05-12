@@ -5,8 +5,9 @@ import axios, { type AxiosProgressEvent } from "axios";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress"
 import { toast, Toaster } from "vue-sonner";
-import { mapUploadProcess, type UploadProcess } from "@/types.ts";
+import { mapUploadProcess, type UploadProcess } from "@/models.ts";
 import UploadProcessContainer from "@/components/custom/UploadProcessContainer.vue";
+import type { UploadMetaData } from "./types";
 
 const path = ref<string>()
 const progress = ref<number | null>(0)
@@ -15,6 +16,7 @@ const successfullUpload = ref(false)
 const files = ref<File[]>([])
 const uploadProcesses = ref<UploadProcess[]>([])
 const uploadSpeed = ref(0)
+const etaInMinutes = ref(0)
 
 async function loadUploadProcesses(): Promise<UploadProcess[]> {
   const response = await axios.get("/api/upload_process")
@@ -45,9 +47,14 @@ async function handleSubmit() {
     })
     const data = await uploadProcessResponse.data
     const processId = data.ID
-    const fileProgresses: Record<string, number> = {}
-    const uploadSpeeds: Record<string, number> = {}
-    await Promise.all(files.value.map(it => handleFileUpload(it, processId, fileProgresses, uploadSpeeds)))
+    const fileMetaData: UploadMetaData = {
+      uploadSpeeds: {},
+      averageSpeed: {},
+      fileProgress: {},
+      speedCounter: {},
+      etaInMinutes: {}
+    }
+    await Promise.all(files.value.map(it => handleFileUpload(it, processId, fileMetaData)))
     successfullUpload.value = true
   }
   catch (e) {
@@ -57,10 +64,9 @@ async function handleSubmit() {
     isUploading.value = false
   }
 }
-
-async function handleFileUpload(file: File, processId: number, fileProgresses: Record<string, number>, uploadSpeeds: Record<string, number>): Promise<void> {
+async function handleFileUpload(file: File, processId: number, uploadMetaData: UploadMetaData): Promise<void> {
   const fileName = file.name
-  fileProgresses[fileName] = 0
+  uploadMetaData.fileProgress[fileName] = 0
   const fileFormData = new FormData()
   fileFormData.append("files", file)
   let lastTime = Date.now()
@@ -71,20 +77,29 @@ async function handleFileUpload(file: File, processId: number, fileProgresses: R
         "Content-Type": "multipart/form-data"
       },
       onUploadProgress(progressEvent: AxiosProgressEvent) {
-
         const now = Date.now()
         const timeElapsed = (now - lastTime) / 1000
         const bytesUploaded = progressEvent.loaded - lastLoaded
+        let speedBytesPerSec = 1
         if (timeElapsed > 0) {
-          const speedBytesPerSec = bytesUploaded / timeElapsed
-          const speedKbps = (speedBytesPerSec / (1024 * 1024))
-          uploadSpeeds[fileName] = speedKbps
+          speedBytesPerSec = bytesUploaded / timeElapsed
+          const speedMbps = (speedBytesPerSec / (1024 * 1024))
+          uploadMetaData.uploadSpeeds[fileName] = speedMbps
         }
-        uploadSpeed.value = Object.values(uploadSpeeds).reduce((prev, curr) => curr + prev)
+        const speed = Object.values(uploadMetaData.uploadSpeeds).reduce((prev, curr) => curr + prev)
+        uploadSpeed.value = speed
+
+        // ETA calculation
+        const totalBytes = progressEvent.total ?? file.size
+        const remainingBytes = totalBytes - progressEvent.loaded
+        const etaSeconds = remainingBytes / speedBytesPerSec
+        uploadMetaData.etaInMinutes[fileName] = etaSeconds / 60
+
+        etaInMinutes.value = Object.values(uploadMetaData.etaInMinutes).reduce((curr, prev) => curr + prev)
 
         const fileProgress = Math.round((progressEvent.loaded * 100) / (progressEvent.total!!))
-        fileProgresses[fileName] = fileProgress
-        progress.value = calculateTotalProgress(fileProgresses)
+        uploadMetaData.fileProgress[fileName] = fileProgress
+        progress.value = calculateTotalProgress(uploadMetaData.fileProgress)
       },
     })
     if (response.status === 200) {
@@ -128,9 +143,12 @@ function calculateTotalProgress(fileProgresses: Record<string, number>): number 
       <div v-if="isUploading" class="flex flex-col mt-5 gap-5">
         <div class="flex justify-between">
           <p>Uploaded Percent: </p>
-          <p>{{ progress }}%</p>
+          <p>{{ progress?.toFixed(2) }}%</p>
         </div>
-        <p>Upload Speed: {{ uploadSpeed.toFixed(1) }} MB/s</p>
+        <div class="flex justify-between">
+          <p>Upload Speed: {{ uploadSpeed.toFixed(1) }} MB/s</p>
+          <p>ETA in Minutes: {{ etaInMinutes.toFixed(2) }}</p>
+        </div>
       </div>
     </div>
   </div>

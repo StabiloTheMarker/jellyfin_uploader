@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ChevronDown, ChevronUp, Trash } from "lucide-vue-next"
-import type { UploadProcess } from "@/types.ts";
+import type { UploadProcess } from "@/models";
 import { ref } from "vue";
 import { Button } from "@/components/ui/button";
 
