@@ -79,6 +79,7 @@ async function handleSubmit() {
         onUploadProgress(progressEvent: AxiosProgressEvent) {
           uploadedBytes.value = progressEvent.loaded
           totalBytes.value = progressEvent.total ?? totalBytes.value
+          loadUploadProcesses()
         }
       })
       successfullUpload.value = true
