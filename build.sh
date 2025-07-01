@@ -2,42 +2,59 @@
 
 # build_for_linux.sh
 # =====================
-# Builds a Go project for Linux ARM (Raspberry Pi)
+# Builds a Go project for Linux ARM64 (e.g., Raspberry Pi)
+# Moves the binary and frontend dist folder to /jellyfin
+# Sets ownership to jellyfin
 
 # Configuration
-GO_FILE="main.go"                 # Name of your Go source file
-OUTPUT_NAME="jellyfin_uploader"  # Output binary name
+GO_FILE="main.go"
+OUTPUT_NAME="jellyfin_uploader"
 GOOS="linux"
 GOARCH="arm64"
 CGO_ENABLED=1
 
-# Optional: Set GOARM if targeting 32-bit ARM (not needed for arm64)
-# GOARM=7
-# export GOARM
+DEST_DIR="/jellyfin"
+BIN_DIR="$DEST_DIR/bin"
+DIST_DIR="$DEST_DIR/dist"
 
-# Export environment variables
+# Export Go environment
 export GOOS=$GOOS
 export GOARCH=$GOARCH
 export CGO_ENABLED=$CGO_ENABLED
 
-# Build the binary
-echo "Building $GO_FILE for $GOOS/$GOARCH..."
-go build -o bin/$OUTPUT_NAME $GO_FILE
+# Build Go binary
+echo "🔧 Building $GO_FILE for $GOOS/$GOARCH..."
+go build -o bin/$OUTPUT_NAME .
 
-if [ $? -eq 0 ]; then
-    echo "✅ Build succeeded: $OUTPUT_NAME"
-else
-    echo "❌ Build failed."
+if [ $? -ne 0 ]; then
+    echo "❌ Go build failed."
     exit 1
 fi
 
+echo "✅ Go build succeeded."
+
 # Build frontend
-cd webapp || exit 1
+cd webapp || { echo "❌ Could not enter webapp directory"; exit 1; }
 npm run build
 
-if [ $? -eq 0 ]; then
-    echo "✅ Successfully built dist"
-else
+if [ $? -ne 0 ]; then
     echo "❌ Web build failed."
     exit 1
 fi
+
+echo "✅ Frontend build succeeded."
+cd ..
+
+# Create destination directories
+sudo mkdir -p "$BIN_DIR" "$DIST_DIR"
+
+# Move binary and dist to /jellyfin
+sudo cp "bin/$OUTPUT_NAME" "$BIN_DIR/"
+sudo cp -r "webapp/dist/"* "$DIST_DIR/"
+
+# Change ownership
+sudo chown -R jellyfin:jellyfin "$DEST_DIR"
+
+echo "🚚 Moved binary and dist to $DEST_DIR"
+echo "✅ Ownership set to user: jellyfin"
+
