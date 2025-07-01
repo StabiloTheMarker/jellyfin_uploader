@@ -1,15 +1,14 @@
 package util
 
 import (
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 	"jellyfin_uploader/models"
 	"log"
 	"net/http"
 	"os"
 	"strings"
 	"time"
-
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
 var DB *gorm.DB
@@ -20,6 +19,7 @@ func MakeApiFunc(f ApiHandleFunc) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		err := f(w, r)
 		if err != nil {
+			log.Println("ERROR: Handler returned with an error: " + err.Error())
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

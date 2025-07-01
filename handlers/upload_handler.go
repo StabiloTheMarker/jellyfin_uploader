@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"github.com/gorilla/mux"
 	"io"
 	"jellyfin_uploader/models"
 	"jellyfin_uploader/repositories"
@@ -10,8 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"time"
-
-	"github.com/gorilla/mux"
 )
 
 func HandleUpload(w http.ResponseWriter, r *http.Request) error {
@@ -40,6 +39,8 @@ func HandleUpload(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
+
+		defer part.Close()
 		filename := part.FileName()
 		filepath := filepath.Join(uploadProcess.DirPath, filename)
 		log.Println("Uploading file:", filename)
@@ -47,6 +48,7 @@ func HandleUpload(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
+		defer dst.Close()
 		file := models.File{
 			Name:            filename,
 			Uploaded:        false,
@@ -66,15 +68,7 @@ func HandleUpload(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		err = dst.Close()
-		if err != nil {
-			return err
-		}
 		log.Println("Uploaded file " + filename)
-		err = part.Close()
-		if err != nil {
-			return err
-		}
 	}
 	return nil
 }
